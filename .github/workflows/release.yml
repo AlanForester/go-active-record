@@ -1,0 +1,70 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    name: Build and Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.24"
+          cache: true
+
+      - name: Run tests
+        run: go test -v ./...
+
+      - name: Run linter
+        uses: golangci/golangci-lint-action@v4
+        with:
+          version: latest
+
+      - name: Build
+        run: |
+          mkdir -p dist
+          go build -o dist/go-active-record ./examples/main.go
+
+      - name: Create Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          body: |
+            ## Changes in this Release
+
+            This is an automated release for version ${{ github.ref }}.
+
+            ### Features
+            - Active Record pattern implementation for Go
+            - CRUD operations
+            - Validations
+            - Associations (HasMany, BelongsTo, HasOne)
+            - Migrations
+            - Query builder
+
+            ### Installation
+            ```bash
+            go get github.com/Forester-Co/go-active-record
+            ```
+          draft: false
+          prerelease: false
+
+      - name: Upload Release Assets
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./dist/go-active-record
+          asset_name: go-active-record-${{ github.ref_name }}-linux-amd64

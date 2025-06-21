@@ -1,6 +1,9 @@
 version: "2"
 run:
-  go: "1.21"
+  timeout: 5m
+  go: "1.24"
+  modules-download-mode: readonly
+
 linters:
   enable:
     - dupl
@@ -35,13 +38,3 @@ linters:
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
-formatters:
-  enable:
-    - gofmt
-    - goimports
-  exclusions:
-    generated: lax
-    paths:
-      - third_party$
-      - builtin$
-      - examples$

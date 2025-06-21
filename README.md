@@ -7,15 +7,18 @@ An Active Record library for Go, inspired by Rails Active Record. Provides a con
 - 🚀 **CRUD Operations** - create, read, update, delete records
 - ✅ **Validations** - built-in validators for data validation
 - 🔗 **Associations** - relationships between models (has_one, has_many, belongs_to)
+- 🤖 **Auto-Association Detection** - automatically detect and register associations
 - 📊 **Migrations** - database schema management
 - 🔍 **Query Builder** - convenient query builder
 - 🛡️ **Transactions** - transaction support
 - 📝 **Logging** - built-in SQL query logging
+- 🔧 **CI/CD** - GitHub Actions for automated testing and deployment
+- 🛡️ **Security** - automated security scanning and vulnerability checks
 
 ## Installation
 
 ```bash
-go get github.com/your-username/go-active-record
+go get github.com/Forester-Co/go-active-record
 ```
 
 ## Quick Start
@@ -27,7 +30,7 @@ package main
 
 import (
     "log"
-    "github.com/your-username/go-active-record/activerecord"
+    "github.com/Forester-Co/go-active-record/activerecord"
 )
 
 func main() {
@@ -121,49 +124,9 @@ if !user.IsValid() {
 }
 ```
 
-### Migrations
-
-```go
-type CreateUsersTable struct {
-    activerecord.Migration
-}
-
-func (m *CreateUsersTable) Version() int64 {
-    return 20231201000001
-}
-
-func (m *CreateUsersTable) Up() error {
-    return activerecord.CreateTable("users", func(t *activerecord.TableBuilder) {
-        t.Column("id", "SERIAL", "PRIMARY KEY")
-        t.Column("name", "VARCHAR(255)", "NOT NULL")
-        t.Column("email", "VARCHAR(255)", "UNIQUE", "NOT NULL")
-        t.Column("age", "INTEGER")
-        t.Timestamps()
-        t.Index("email")
-    })
-}
-
-func (m *CreateUsersTable) Down() error {
-    return activerecord.DropTable("users")
-}
-
-// Run migrations
-func main() {
-    migrator := activerecord.NewMigrator()
-    migrations := []activerecord.Migration{
-        &CreateUsersTable{},
-    }
-    
-    err := migrator.Migrate(migrations)
-    if err != nil {
-        log.Fatal(err)
-    }
-}
-```
-
 ### Associations
 
-The library supports automatic association detection and manual association definition.
+The library supports both automatic association detection and manual association definition.
 
 #### Auto-Association Detection
 
@@ -175,12 +138,12 @@ type User struct {
     Name     string
     MentorID int
     Mentor   *User  `db:"-"`  // BelongsTo association
-    Mentees  []User `db:"-"`  // HasMany association
+    Mentees  []*User `db:"-"`  // HasMany association
 }
 
 // The library automatically detects and registers associations:
 // - Mentor field (*User) -> BelongsTo association with foreign key "MentorID"
-// - Mentees field ([]User) -> HasMany association with foreign key "MentorID"
+// - Mentees field ([]*User) -> HasMany association with foreign key "MentorID"
 
 // Usage
 mentor := &User{Name: "Master"}
@@ -225,7 +188,7 @@ func (p *Post) BelongsTo(name string, model interface{}, foreignKey string) {
 #### Supported Association Types
 
 - **BelongsTo**: `*OtherModel` - one-to-one relationship where this model belongs to another
-- **HasMany**: `[]OtherModel` - one-to-many relationship where this model has many others
+- **HasMany**: `[]OtherModel` or `[]*OtherModel` - one-to-many relationship where this model has many others
 - **HasOne**: `*OtherModel` - one-to-one relationship where this model has one other
 - **HasManyThrough**: complex many-to-many relationships (planned)
 
@@ -238,6 +201,57 @@ user.Load("Mentor")
 // Load multiple associations
 user.Include("Mentor", "Mentees")
 ```
+
+### Migrations
+
+```go
+type CreateUsersTable struct {
+    activerecord.Migration
+}
+
+func (m *CreateUsersTable) Version() int64 {
+    return 20231201000001
+}
+
+func (m *CreateUsersTable) Up() error {
+    return activerecord.CreateTable("users", func(t *activerecord.TableBuilder) {
+        t.Column("id", "SERIAL", "PRIMARY KEY")
+        t.Column("name", "VARCHAR(255)", "NOT NULL")
+        t.Column("email", "VARCHAR(255)", "UNIQUE", "NOT NULL")
+        t.Column("age", "INTEGER")
+        t.Timestamps()
+        t.Index("email")
+    })
+}
+
+func (m *CreateUsersTable) Down() error {
+    return activerecord.DropTable("users")
+}
+
+// Run migrations
+func main() {
+    migrator := activerecord.NewMigrator()
+    migrations := []activerecord.Migration{
+        &CreateUsersTable{},
+    }
+    
+    err := migrator.Migrate(migrations)
+    if err != nil {
+        log.Fatal(err)
+    }
+}
+```
+
+## CI/CD & Automation
+
+This project includes comprehensive GitHub Actions workflows:
+
+- **CI/CD Pipeline** - Automated testing on multiple Go versions (1.21-1.24)
+- **Security Scanning** - Weekly security checks with gosec and govulncheck
+- **Code Quality** - Automated linting with golangci-lint
+- **Documentation** - Auto-generated docs on GitHub Pages
+- **Dependency Updates** - Automated dependency updates with Dependabot
+- **Release Management** - Automated releases when tags are created
 
 ## Supported Databases
 
@@ -256,9 +270,9 @@ user.Include("Mentor", "Mentees")
 - `Delete() error` - deletes a record
 - `Save() error` - saves a record (creates or updates)
 - `IsNewRecord() bool` - checks if record is new
-- `IsPersisted() bool` - checks if record is persisted
+- `IsPersisted() bool` - checks if record is saved
 - `Touch() error` - updates timestamps
-- `Reload() error` - reloads data from database
+- `Reload() error` - reloads data from DB
 
 #### Global Methods
 
@@ -273,10 +287,10 @@ user.Include("Mentor", "Mentees")
 
 - `PresenceOf(field string)` - check for presence
 - `Length(field string, min, max int)` - check string length
-- `Email(field string)` - check email format
+- `Email(field string)` - validate email format
 - `Uniqueness(field string)` - check uniqueness
-- `Numericality(field string, min, max float64)` - check numeric value
-- `Format(field string, pattern string)` - check regex pattern
+- `Numericality(field string, min, max float64)` - validate numeric value
+- `Format(field string, pattern string)` - validate with regex
 
 ### Migrations
 
@@ -289,89 +303,30 @@ user.Include("Mentor", "Mentees")
 
 ## Examples
 
-Complete usage examples can be found in the `main.go` file.
-
-## Development
-
-### Prerequisites
-
-- Go 1.21+
-- PostgreSQL/MySQL/SQLite
-
-### Setup
-
-```bash
-# Clone the repository
-git clone https://github.com/your-username/go-active-record.git
-cd go-active-record
-
-# Install dependencies
-make deps
-
-# Run tests
-make test
-
-# Build the project
-make build
-```
-
-### Available Commands
-
-```bash
-make help          # Show available commands
-make test          # Run tests
-make build         # Build project
-make lint          # Run linter
-make fmt           # Format code
-make clean         # Clean build artifacts
-make example       # Run example
-make migrate       # Run migrations
-```
-
-### Docker Development
-
-```bash
-# Start all services
-docker-compose up -d
-
-# Run tests in container
-docker-compose exec app make test
-
-# Stop all services
-docker-compose down
-```
+Complete usage examples can be found in the `examples/` directory.
 
 ## Contributing
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
-## Testing
+## Security
 
-```bash
-# Run all tests
-make test
-
-# Run tests with coverage
-make test-coverage
-
-# Run benchmarks
-make benchmark
-```
+Please report security vulnerabilities to security@forester.co. See [SECURITY.md](SECURITY.md) for more information.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT License
 
-## TODO
+## Status
 
-- [x] Implement associations
-- [ ] Add transaction support
-- [ ] Add SQL query logging
-- [ ] Add caching
-- [ ] Support for other databases
-- [ ] Add more tests
-- [ ] Complete API documentation 
+- [x] CRUD operations
+- [x] Validations
+- [x] Associations (manual and automatic)
+- [x] Migrations
+- [x] Query builder
+- [x] CI/CD pipeline
+- [x] Security scanning
+- [ ] Transactions
+- [ ] HasManyThrough associations
+- [ ] Advanced query builder
+- [ ] Connection pooling 
