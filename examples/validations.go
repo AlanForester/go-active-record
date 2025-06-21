@@ -4,7 +4,15 @@ import (
 	"go-active-record/activerecord"
 )
 
-// Post model with validations
+const (
+	minTitleLength   = 5
+	maxTitleLength   = 200
+	minContentLength = 10
+	maxContentLength = 10000
+	maxUserID        = 999999
+)
+
+// Post model with validations.
 type Post struct {
 	activerecord.ValidationModel
 	Title   string `db:"title" json:"title"`
@@ -12,12 +20,12 @@ type Post struct {
 	UserID  int    `db:"user_id" json:"user_id"`
 }
 
-// TableName returns the table name
+// TableName returns the table name.
 func (p *Post) TableName() string {
 	return "posts"
 }
 
-// SetupValidations sets up validations for the model
+// SetupValidations sets up validations for the model.
 func (p *Post) SetupValidations() {
 	// Required fields
 	p.PresenceOf("Title")
@@ -25,13 +33,13 @@ func (p *Post) SetupValidations() {
 	p.PresenceOf("UserID")
 
 	// Title length validation
-	p.Length("Title", 5, 200)
+	p.Length("Title", minTitleLength, maxTitleLength)
 
 	// Content length validation
-	p.Length("Content", 10, 10000)
+	p.Length("Content", minContentLength, maxContentLength)
 
 	// UserID validation
-	p.Numericality("UserID", 1, 999999)
+	p.Numericality("UserID", 1, maxUserID)
 }
 
 // Example usage of validations for Post

@@ -7,83 +7,171 @@ import (
 )
 
 type ModelTest struct {
-	BaseModel
-	Name string `db:"name"`
-	Age  int    `db:"age"`
+	ID        interface{} `db:"id"`
+	Name      string      `db:"name"`
+	Age       int         `db:"age"`
+	CreatedAt time.Time   `db:"created_at"`
+	UpdatedAt time.Time   `db:"updated_at"`
 }
 
-func (m *ModelTest) TableName() string { return "model_tests" }
+func (m *ModelTest) TableName() string        { return "model_tests" }
+func (m *ModelTest) GetID() interface{}       { return m.ID }
+func (m *ModelTest) SetID(id interface{})     { m.ID = id }
+func (m *ModelTest) GetCreatedAt() time.Time  { return m.CreatedAt }
+func (m *ModelTest) SetCreatedAt(t time.Time) { m.CreatedAt = t }
+func (m *ModelTest) GetUpdatedAt() time.Time  { return m.UpdatedAt }
+func (m *ModelTest) SetUpdatedAt(t time.Time) { m.UpdatedAt = t }
+
+func (m *ModelTest) Find(id interface{}) error {
+	return Find(m, id)
+}
+
+func (m *ModelTest) Where(query string, args ...interface{}) (interface{}, error) {
+	var results []*ModelTest
+	err := Where(&results, query, args...)
+	return results, err
+}
 
 func TestBaseModelMethods(t *testing.T) {
-	b := &BaseModel{}
-	b.SetID(int64(42))
-	if b.GetID() != 42 {
-		t.Error("SetID/GetID failed")
+	db, _ := Connect("sqlite3", ":memory:")
+	SetConnection(db, "sqlite3")
+	if _, err := db.Exec(`CREATE TABLE model_tests (
+		id INTEGER PRIMARY KEY AUTOINCREMENT, 
+		name TEXT, 
+		age INTEGER, 
+		created_at TIMESTAMP, 
+		updated_at TIMESTAMP
+	)`); err != nil {
+		t.Fatalf("Failed to create table: %v", err)
 	}
+
+	model := &BaseModel{}
+	model.SetID(1)
+	if model.GetID() != 1 {
+		t.Error("GetID should return 1")
+	}
+
 	now := time.Now()
-	b.SetCreatedAt(now)
-	b.SetUpdatedAt(now)
-	if !b.GetCreatedAt().Equal(now) || !b.GetUpdatedAt().Equal(now) {
-		t.Error("Set/Get CreatedAt/UpdatedAt failed")
+	model.SetCreatedAt(now)
+	if !model.GetCreatedAt().Equal(now) {
+		t.Error("GetCreatedAt should return the set time")
+	}
+
+	model.SetUpdatedAt(now)
+	if !model.GetUpdatedAt().Equal(now) {
+		t.Error("GetUpdatedAt should return the set time")
 	}
 }
 
 func TestSetTimestampsDeep(t *testing.T) {
-	m := &ModelTest{}
-	setTimestampsDeep(reflect.ValueOf(m), time.Now())
-	if m.CreatedAt.IsZero() || m.UpdatedAt.IsZero() {
-		t.Error("setTimestampsDeep should set timestamps")
+	db, _ := Connect("sqlite3", ":memory:")
+	SetConnection(db, "sqlite3")
+	if _, err := db.Exec(`CREATE TABLE model_tests (
+		id INTEGER PRIMARY KEY AUTOINCREMENT, 
+		name TEXT, 
+		age INTEGER, 
+		created_at TIMESTAMP, 
+		updated_at TIMESTAMP
+	)`); err != nil {
+		t.Fatalf("Failed to create table: %v", err)
+	}
+
+	model := &ModelTest{Name: "Test", Age: 25}
+	now := time.Now()
+	setTimestampsDeep(reflect.ValueOf(model), now)
+
+	if model.GetCreatedAt().IsZero() {
+		t.Error("CreatedAt should be set")
+	}
+	if model.GetUpdatedAt().IsZero() {
+		t.Error("UpdatedAt should be set")
 	}
 }
 
 func TestGetFieldsAndValues(t *testing.T) {
+	db, _ := Connect("sqlite3", ":memory:")
+	SetConnection(db, "sqlite3")
+	if _, err := db.Exec(`CREATE TABLE model_tests (
+		id INTEGER PRIMARY KEY AUTOINCREMENT, 
+		name TEXT, 
+		age INTEGER, 
+		created_at TIMESTAMP, 
+		updated_at TIMESTAMP
+	)`); err != nil {
+		t.Fatalf("Failed to create table: %v", err)
+	}
+
+	if err := Create(&ModelTest{Name: "A", Age: 1}); err != nil {
+		t.Fatalf("Failed to create model A: %v", err)
+	}
+	if err := Create(&ModelTest{Name: "B", Age: 2}); err != nil {
+		t.Fatalf("Failed to create model B: %v", err)
+	}
+
 	m := &ModelTest{Name: "A", Age: 1}
 	fields, values := getFieldsAndValues(m, false)
-	if len(fields) == 0 || len(values) == 0 {
-		t.Error("getFieldsAndValues should return fields and values")
+	if len(fields) == 0 {
+		t.Error("Fields should not be empty")
+	}
+	if len(values) == 0 {
+		t.Error("Values should not be empty")
 	}
 }
 
 func TestCreate_Find_Update_Delete(t *testing.T) {
 	db, _ := Connect("sqlite3", ":memory:")
 	SetConnection(db, "sqlite3")
-	db.Exec(`CREATE TABLE model_tests (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, age INTEGER, created_at TIMESTAMP, updated_at TIMESTAMP)`)
+	if _, err := db.Exec(`CREATE TABLE model_tests (
+		id INTEGER PRIMARY KEY AUTOINCREMENT, 
+		name TEXT, 
+		age INTEGER, 
+		created_at TIMESTAMP, 
+		updated_at TIMESTAMP
+	)`); err != nil {
+		t.Fatalf("Failed to create table: %v", err)
+	}
 	m := &ModelTest{Name: "Test", Age: 10}
-	err := Create(m)
-	if err != nil {
-		t.Errorf("Create failed: %v", err)
+	if err := Create(m); err != nil {
+		t.Fatalf("Create failed: %v", err)
 	}
 	m.Age = 20
-	err = Update(m)
-	if err != nil {
-		t.Errorf("Update failed: %v", err)
+	if err := Update(m); err != nil {
+		t.Fatalf("Update failed: %v", err)
 	}
 	found := &ModelTest{}
-	err = Find(found, m.GetID())
-	if err != nil {
-		t.Errorf("Find failed: %v", err)
+	if err := Find(found, m.GetID()); err != nil {
+		t.Fatalf("Find failed: %v", err)
 	}
-	err = Delete(m)
-	if err != nil {
-		t.Errorf("Delete failed: %v", err)
+	if err := Delete(m); err != nil {
+		t.Fatalf("Delete failed: %v", err)
 	}
 }
 
 func TestFindAll_Where(t *testing.T) {
 	db, _ := Connect("sqlite3", ":memory:")
 	SetConnection(db, "sqlite3")
-	db.Exec(`CREATE TABLE model_tests (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, age INTEGER, created_at TIMESTAMP, updated_at TIMESTAMP)`)
-	Create(&ModelTest{Name: "A", Age: 1})
-	Create(&ModelTest{Name: "B", Age: 2})
-	var all []ModelTest
-	err := FindAll(&all)
-	if err != nil || len(all) < 2 {
-		t.Error("FindAll failed or not enough records")
+	if _, err := db.Exec(`CREATE TABLE model_tests (
+		id INTEGER PRIMARY KEY AUTOINCREMENT, 
+		name TEXT, 
+		age INTEGER, 
+		created_at TIMESTAMP, 
+		updated_at TIMESTAMP
+	)`); err != nil {
+		t.Fatalf("Failed to create table: %v", err)
 	}
-	var filtered []ModelTest
-	err = Where(&filtered, "age = ?", 2)
-	if err != nil || len(filtered) != 1 {
-		t.Error("Where failed or wrong number of records")
+	if err := Create(&ModelTest{Name: "A", Age: 1}); err != nil {
+		t.Fatalf("Failed to create model A: %v", err)
+	}
+	if err := Create(&ModelTest{Name: "B", Age: 2}); err != nil {
+		t.Fatalf("Failed to create model B: %v", err)
+	}
+	var all []*ModelTest
+	if err := FindAll(&all); err != nil || len(all) < 2 {
+		t.Fatalf("FindAll failed or not enough records: %v", err)
+	}
+	var filtered []*ModelTest
+	if err := Where(&filtered, "age = ?", 2); err != nil || len(filtered) != 1 {
+		t.Fatalf("Where failed or wrong number of records: %v", err)
 	}
 }
 
@@ -132,7 +220,7 @@ func TestFindAll_Where_Errors(t *testing.T) {
 
 func TestScanRow_Errors(t *testing.T) {
 	m := &ModelTest{}
-	err := scanRow(123, m, []string{"id"})
+	err := scanRow(123, m)
 	if err == nil {
 		t.Error("scanRow should fail for unsupported row type")
 	}

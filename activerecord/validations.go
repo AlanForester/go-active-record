@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// ValidationRule правило validation
+// ValidationRule правило validation.
 type ValidationRule struct {
 	Field   string
 	Rule    string
@@ -15,7 +15,7 @@ type ValidationRule struct {
 	Params  []interface{}
 }
 
-// ValidationError ошибка validation
+// ValidationError ошибка validation.
 type ValidationError struct {
 	Field   string
 	Message string
@@ -25,7 +25,7 @@ func (e ValidationError) Error() string {
 	return fmt.Sprintf("%s: %s", e.Field, e.Message)
 }
 
-// ValidationErrors коллекция ошибок validation
+// ValidationErrors коллекция ошибок validation.
 type ValidationErrors []ValidationError
 
 func (e ValidationErrors) Error() string {
@@ -40,21 +40,21 @@ func (e ValidationErrors) Error() string {
 	return strings.Join(messages, "; ")
 }
 
-// Validatable интерфейс для валидируемых моделей
+// Validatable интерфейс для валидируемых моделей.
 type Validatable interface {
 	Validate() ValidationErrors
 	IsValid() bool
 	Errors() ValidationErrors
 }
 
-// ValidationModel базовая модель с validation
+// ValidationModel базовая модель с validation.
 type ValidationModel struct {
 	ActiveRecordModel
 	validationErrors ValidationErrors
 	validationRules  []ValidationRule
 }
 
-// Validate выполняет validation модели
+// Validate выполняет validation модели.
 func (m *ValidationModel) Validate(model interface{}) ValidationErrors {
 	m.validationErrors = ValidationErrors{}
 	for _, rule := range m.validationRules {
@@ -65,17 +65,17 @@ func (m *ValidationModel) Validate(model interface{}) ValidationErrors {
 	return m.validationErrors
 }
 
-// IsValid проверяет, валидна ли модель
+// IsValid проверяет, валидна ли модель.
 func (m *ValidationModel) IsValid(model interface{}) bool {
 	return len(m.Validate(model)) == 0
 }
 
-// Errors возвращает ошибки validation
+// Errors возвращает ошибки validation.
 func (m *ValidationModel) Errors() ValidationErrors {
 	return m.validationErrors
 }
 
-// AddValidation добавляет правило validation
+// AddValidation добавляет правило validation.
 func (m *ValidationModel) AddValidation(field, rule string, message string, params ...interface{}) {
 	m.validationRules = append(m.validationRules, ValidationRule{
 		Field:   field,
@@ -85,39 +85,39 @@ func (m *ValidationModel) AddValidation(field, rule string, message string, para
 	})
 }
 
-// Валидаторы
+// Валидаторы.
 
-// PresenceOf проверяет наличие значения
+// PresenceOf проверяет наличие значения.
 func (m *ValidationModel) PresenceOf(field string) {
 	m.AddValidation(field, "presence", "cannot be empty")
 }
 
-// Length проверяет длину строки
+// Length проверяет длину строки.
 func (m *ValidationModel) Length(field string, min, max int) {
 	m.AddValidation(field, "length", fmt.Sprintf("must be between %d and %d characters", min, max), min, max)
 }
 
-// Email проверяет формат email
+// Email проверяет формат email.
 func (m *ValidationModel) Email(field string) {
 	m.AddValidation(field, "email", "has invalid format")
 }
 
-// Uniqueness проверяет уникальность
+// Uniqueness проверяет уникальность.
 func (m *ValidationModel) Uniqueness(field string) {
 	m.AddValidation(field, "uniqueness", "must be unique")
 }
 
-// Numericality проверяет числовое значение
+// Numericality проверяет числовое значение.
 func (m *ValidationModel) Numericality(field string, min, max float64) {
 	m.AddValidation(field, "numericality", fmt.Sprintf("must be between %f and %f", min, max), min, max)
 }
 
-// Format проверяет формат по регулярному выражению
+// Format проверяет формат по регулярному выражению.
 func (m *ValidationModel) Format(field string, pattern string) {
 	m.AddValidation(field, "format", "has invalid format", pattern)
 }
 
-// Вспомогательные методы
+// Вспомогательные методы.
 
 func (m *ValidationModel) validateRule(model interface{}, rule ValidationRule) *ValidationError {
 	fieldValue := getFieldValue(model, rule.Field)
@@ -189,15 +189,6 @@ func getFieldValue(model interface{}, fieldName string) interface{} {
 		}
 	}
 	return nil
-}
-
-// In ValidationModel
-func (m *ValidationModel) getFieldValue(fieldName string) interface{} {
-	// Use the outer struct if possible
-	if mPtr, ok := any(m).(interface{ Outer() interface{} }); ok {
-		return getFieldValue(mPtr.Outer(), fieldName)
-	}
-	return getFieldValue(m, fieldName)
 }
 
 func (m *ValidationModel) isEmpty(value interface{}) bool {

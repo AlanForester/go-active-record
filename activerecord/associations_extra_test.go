@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+	"time"
 )
 
 type AssocModel struct{ ActiveRecordModel }
@@ -50,8 +51,10 @@ func TestJoinAndEagerLoadingStubs(t *testing.T) {
 }
 
 type Author struct {
-	BaseModel
-	Name string
+	ID        interface{} `db:"id"`
+	Name      string      `db:"name"`
+	CreatedAt time.Time   `db:"created_at"`
+	UpdatedAt time.Time   `db:"updated_at"`
 }
 
 func (a *Author) TableName() string { return "authors" }
@@ -71,11 +74,27 @@ func (a *Author) Load(name string) error {
 	}
 	return loadHasMany(a, name, association)
 }
+func (a *Author) GetID() interface{}       { return a.ID }
+func (a *Author) SetID(id interface{})     { a.ID = id }
+func (a *Author) GetCreatedAt() time.Time  { return a.CreatedAt }
+func (a *Author) SetCreatedAt(t time.Time) { a.CreatedAt = t }
+func (a *Author) GetUpdatedAt() time.Time  { return a.UpdatedAt }
+func (a *Author) SetUpdatedAt(t time.Time) { a.UpdatedAt = t }
+func (a *Author) Find(id interface{}) error {
+	return Find(a, id)
+}
+func (a *Author) Where(query string, args ...interface{}) (interface{}, error) {
+	var authors []Author
+	err := Where(&authors, query, args...)
+	return authors, err
+}
 
 type Book struct {
-	BaseModel
-	Title    string
-	AuthorID int
+	ID        interface{} `db:"id"`
+	Title     string      `db:"title"`
+	AuthorID  int         `db:"authorid"`
+	CreatedAt time.Time   `db:"created_at"`
+	UpdatedAt time.Time   `db:"updated_at"`
 }
 
 func (b *Book) TableName() string { return "books" }
@@ -95,17 +114,50 @@ func (b *Book) Load(name string) error {
 	}
 	return loadBelongsTo(b, name, association)
 }
+func (b *Book) GetID() interface{}       { return b.ID }
+func (b *Book) SetID(id interface{})     { b.ID = id }
+func (b *Book) GetCreatedAt() time.Time  { return b.CreatedAt }
+func (b *Book) SetCreatedAt(t time.Time) { b.CreatedAt = t }
+func (b *Book) GetUpdatedAt() time.Time  { return b.UpdatedAt }
+func (b *Book) SetUpdatedAt(t time.Time) { b.UpdatedAt = t }
+func (b *Book) Find(id interface{}) error {
+	return Find(b, id)
+}
+func (b *Book) Where(query string, args ...interface{}) (interface{}, error) {
+	var books []Book
+	err := Where(&books, query, args...)
+	return books, err
+}
 
 func TestHasManyAndBelongsToAssociations(t *testing.T) {
 	db, _ := Connect("sqlite3", ":memory:")
 	SetConnection(db, "sqlite3")
-	db.Exec(`CREATE TABLE authors (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, created_at TIMESTAMP, updated_at TIMESTAMP)`)
-	db.Exec(`CREATE TABLE books (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, authorid INTEGER, created_at TIMESTAMP, updated_at TIMESTAMP)`)
+	if _, err := db.Exec(`CREATE TABLE authors (
+		id INTEGER PRIMARY KEY AUTOINCREMENT, 
+		name TEXT, 
+		created_at TIMESTAMP, 
+		updated_at TIMESTAMP
+	)`); err != nil {
+		t.Fatalf("Failed to create authors table: %v", err)
+	}
+	if _, err := db.Exec(`CREATE TABLE books (
+		id INTEGER PRIMARY KEY AUTOINCREMENT, 
+		title TEXT, 
+		authorid INTEGER, 
+		created_at TIMESTAMP, 
+		updated_at TIMESTAMP
+	)`); err != nil {
+		t.Fatalf("Failed to create books table: %v", err)
+	}
 
 	author := &Author{Name: "Leo Tolstoy"}
-	author.Create()
+	if err := author.Create(); err != nil {
+		t.Fatalf("Failed to create author: %v", err)
+	}
 	t.Logf("author.GetID() after Create = %#v, type=%T", author.GetID(), author.GetID())
-	author.Reload()
+	if err := author.Reload(); err != nil {
+		t.Fatalf("Failed to reload author: %v", err)
+	}
 	t.Logf("author.GetID() after Reload = %#v, type=%T", author.GetID(), author.GetID())
 	aid := author.GetID()
 	var authorID int
@@ -123,11 +175,13 @@ func TestHasManyAndBelongsToAssociations(t *testing.T) {
 		{Title: "Anna Karenina", AuthorID: authorID},
 	}
 	for i := range books {
-		books[i].Create()
+		if err := books[i].Create(); err != nil {
+			t.Fatalf("Failed to create book %d: %v", i, err)
+		}
 	}
 
 	// HasMany: Author has many Books
-	var foundBooks []Book
+	var foundBooks []*Book
 	author.HasMany("books", &foundBooks, "authorid")
 	err := author.Load("books")
 	if err != nil {
@@ -160,10 +214,9 @@ func loadHasMany(model interface{}, name string, association *Association) error
 	query := foreignKey + " = ?"
 
 	// Try setter methods first
-	switch name {
-	case "Mentees":
-		if setter, ok := model.(interface{ SetMentees([]User) }); ok {
-			var result []User
+	if name == "Mentees" {
+		if setter, ok := model.(interface{ SetMentees([]*User) }); ok {
+			var result []*User
 			err := Where(&result, query, id)
 			if err != nil {
 				return err
@@ -184,8 +237,7 @@ func loadBelongsTo(model interface{}, name string, association *Association) err
 	foreignKey := association.ForeignKey
 
 	// Try setter methods first
-	switch name {
-	case "Mentor":
+	if name == "Mentor" {
 		if setter, ok := model.(interface{ SetMentor(*User) }); ok {
 			var mentor User
 			val := reflect.ValueOf(model).Elem().FieldByName(foreignKey)
@@ -213,18 +265,20 @@ func loadBelongsTo(model interface{}, name string, association *Association) err
 }
 
 type User struct {
-	BaseModel
-	Name     string
-	MentorID int
-	Mentor   *User  `db:"-"`
-	Mentees  []User `db:"-"`
+	ID        interface{} `db:"id"`
+	Name      string      `db:"name"`
+	MentorID  int         `db:"mentorid"`
+	CreatedAt time.Time   `db:"created_at"`
+	UpdatedAt time.Time   `db:"updated_at"`
+	Mentor    *User       `db:"-"`
+	Mentees   []*User     `db:"-"`
 }
 
-func (u *User) TableName() string         { return "users" }
-func (u *User) Create() error             { return Create(u) }
-func (u *User) Reload() error             { return Find(u, u.GetID()) }
-func (u *User) SetMentor(mentor *User)    { u.Mentor = mentor }
-func (u *User) SetMentees(mentees []User) { u.Mentees = mentees }
+func (u *User) TableName() string          { return "users" }
+func (u *User) Create() error              { return Create(u) }
+func (u *User) Reload() error              { return Find(u, u.GetID()) }
+func (u *User) SetMentor(mentor *User)     { u.Mentor = mentor }
+func (u *User) SetMentees(mentees []*User) { u.Mentees = mentees }
 func (u *User) Load(name string) error {
 	autoRegisterAssociations(u)
 	association, exists := associationRegistry[name]
@@ -241,15 +295,41 @@ func (u *User) Load(name string) error {
 		return fmt.Errorf("unsupported association type")
 	}
 }
+func (u *User) GetID() interface{}       { return u.ID }
+func (u *User) SetID(id interface{})     { u.ID = id }
+func (u *User) GetCreatedAt() time.Time  { return u.CreatedAt }
+func (u *User) SetCreatedAt(t time.Time) { u.CreatedAt = t }
+func (u *User) GetUpdatedAt() time.Time  { return u.UpdatedAt }
+func (u *User) SetUpdatedAt(t time.Time) { u.UpdatedAt = t }
+func (u *User) Find(id interface{}) error {
+	return Find(u, id)
+}
+func (u *User) Where(query string, args ...interface{}) (interface{}, error) {
+	var users []*User
+	err := Where(&users, query, args...)
+	return users, err
+}
 
 func TestAutoAssociationDetection(t *testing.T) {
 	db, _ := Connect("sqlite3", ":memory:")
 	SetConnection(db, "sqlite3")
-	db.Exec(`CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, mentorid INTEGER, created_at TIMESTAMP, updated_at TIMESTAMP)`)
+	if _, err := db.Exec(`CREATE TABLE users (
+		id INTEGER PRIMARY KEY AUTOINCREMENT, 
+		name TEXT, 
+		mentorid INTEGER, 
+		created_at TIMESTAMP, 
+		updated_at TIMESTAMP
+	)`); err != nil {
+		t.Fatalf("Failed to create users table: %v", err)
+	}
 
 	mentor := &User{Name: "Master"}
-	mentor.Create()
-	mentor.Reload()
+	if err := mentor.Create(); err != nil {
+		t.Fatalf("Failed to create mentor: %v", err)
+	}
+	if err := mentor.Reload(); err != nil {
+		t.Fatalf("Failed to reload mentor: %v", err)
+	}
 	if mentor.GetID() == nil {
 		t.Fatal("mentor.GetID() is nil after Create+Reload")
 	}
@@ -265,17 +345,25 @@ func TestAutoAssociationDetection(t *testing.T) {
 
 	mentee1 := &User{Name: "Student1", MentorID: mentorID}
 	mentee2 := &User{Name: "Student2", MentorID: mentorID}
-	mentee1.Create()
-	mentee2.Create()
+	if err := mentee1.Create(); err != nil {
+		t.Fatalf("Failed to create mentee1: %v", err)
+	}
+	if err := mentee2.Create(); err != nil {
+		t.Fatalf("Failed to create mentee2: %v", err)
+	}
 
 	// Check belongs_to
-	mentee1.Load("Mentor")
+	if err := mentee1.Load("Mentor"); err != nil {
+		t.Fatalf("Failed to load mentor: %v", err)
+	}
 	if mentee1.Mentor == nil || mentee1.Mentor.Name != "Master" {
 		t.Errorf("Expected mentor Master, got %#v", mentee1.Mentor)
 	}
 
 	// Check has_many
-	mentor.Load("Mentees")
+	if err := mentor.Load("Mentees"); err != nil {
+		t.Fatalf("Failed to load mentees: %v", err)
+	}
 	if len(mentor.Mentees) != 2 {
 		t.Errorf("Expected 2 mentees, got %d", len(mentor.Mentees))
 	}

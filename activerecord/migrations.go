@@ -7,8 +7,159 @@ import (
 	"time"
 )
 
+// Migration represents a database migration.
+type Migration struct {
+	ID        int       `db:"id"`
+	Version   string    `db:"version"`
+	CreatedAt time.Time `db:"created_at"`
+}
+
+// Migrator interface for migrations.
+type Migrator interface {
+	Up() error
+	Down() error
+	Version() string
+}
+
+// MigrationManager manages database migrations.
+type MigrationManager struct {
+	migrations []Migrator
+}
+
+// NewMigrationManager creates a new migration manager.
+func NewMigrationManager() *MigrationManager {
+	return &MigrationManager{
+		migrations: make([]Migrator, 0),
+	}
+}
+
+// AddMigration adds a migration to the manager.
+func (mm *MigrationManager) AddMigration(migration Migrator) {
+	mm.migrations = append(mm.migrations, migration)
+}
+
+// Migrate runs all pending migrations.
+func (mm *MigrationManager) Migrate() error {
+	// Create migrations table if it doesn't exist.
+	if err := mm.createMigrationsTable(); err != nil {
+		return fmt.Errorf("failed to create migrations table: %w", err)
+	}
+
+	// Get applied migrations.
+	applied, err := mm.getAppliedMigrations()
+	if err != nil {
+		return fmt.Errorf("failed to get applied migrations: %w", err)
+	}
+
+	// Run pending migrations.
+	for _, migration := range mm.migrations {
+		version := migration.Version()
+		if !applied[version] {
+			if err := migration.Up(); err != nil {
+				return fmt.Errorf("failed to run migration %s: %w", version, err)
+			}
+			if err := mm.recordMigration(version); err != nil {
+				return fmt.Errorf("failed to record migration %s: %w", version, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// Rollback rolls back the last migration.
+func (mm *MigrationManager) Rollback() error {
+	// Get the last applied migration.
+	lastMigration, err := mm.getLastMigration()
+	if err != nil {
+		return fmt.Errorf("failed to get last migration: %w", err)
+	}
+
+	if lastMigration == nil {
+		return fmt.Errorf("no migrations to rollback")
+	}
+
+	// Find the migration and roll it back.
+	for _, migration := range mm.migrations {
+		if migration.Version() == lastMigration.Version {
+			if err := migration.Down(); err != nil {
+				return fmt.Errorf("failed to rollback migration %s: %w", lastMigration.Version, err)
+			}
+			if err := mm.removeMigration(lastMigration.Version); err != nil {
+				return fmt.Errorf("failed to remove migration record %s: %w", lastMigration.Version, err)
+			}
+			return nil
+		}
+	}
+
+	return fmt.Errorf("migration %s not found", lastMigration.Version)
+}
+
+// createMigrationsTable creates the migrations table.
+func (mm *MigrationManager) createMigrationsTable() error {
+	query := `CREATE TABLE IF NOT EXISTS migrations (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		version VARCHAR(255) NOT NULL UNIQUE,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	)`
+	_, err := Exec(query)
+	return err
+}
+
+// getAppliedMigrations returns a map of applied migration versions.
+func (mm *MigrationManager) getAppliedMigrations() (map[string]bool, error) {
+	rows, err := Query("SELECT version FROM migrations")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	applied := make(map[string]bool)
+	for rows.Next() {
+		var version string
+		if err := rows.Scan(&version); err != nil {
+			return nil, err
+		}
+		applied[version] = true
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return applied, nil
+}
+
+// getLastMigration returns the last applied migration.
+func (mm *MigrationManager) getLastMigration() (*Migration, error) {
+	row := QueryRow("SELECT id, version, created_at FROM migrations ORDER BY id DESC LIMIT 1")
+	if row == nil {
+		return nil, nil
+	}
+
+	var migration Migration
+	err := row.Scan(&migration.ID, &migration.Version, &migration.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	return &migration, nil
+}
+
+// recordMigration records a migration as applied.
+func (mm *MigrationManager) recordMigration(version string) error {
+	_, err := Exec("INSERT INTO migrations (version) VALUES (?)", version)
+	return err
+}
+
+// removeMigration removes a migration record.
+func (mm *MigrationManager) removeMigration(version string) error {
+	_, err := Exec("DELETE FROM migrations WHERE version = ?", version)
+	return err
+}
+
 // Migration interface for migrations
-type Migration interface {
+type MigrationInterface interface {
 	Up() error
 	Down() error
 	Version() int64
@@ -31,17 +182,17 @@ func (sm *SchemaMigration) TableName() string {
 }
 
 // Migrator manages migrations
-type Migrator struct {
+type MigratorStruct struct {
 	db *sql.DB
 }
 
 // NewMigrator creates a new migrator instance
-func NewMigrator() *Migrator {
-	return &Migrator{db: GetConnection()}
+func NewMigrator() *MigratorStruct {
+	return &MigratorStruct{db: GetConnection()}
 }
 
 // CreateMigrationsTable creates a table for tracking migrations
-func (m *Migrator) CreateMigrationsTable() error {
+func (m *MigratorStruct) CreateMigrationsTable() error {
 	query := `
 		CREATE TABLE IF NOT EXISTS schema_migrations (
 			version BIGINT PRIMARY KEY,
@@ -54,7 +205,7 @@ func (m *Migrator) CreateMigrationsTable() error {
 }
 
 // Migrate performs all unapplied migrations
-func (m *Migrator) Migrate(migrations []Migration) error {
+func (m *MigratorStruct) Migrate(migrations []MigrationInterface) error {
 	// Create migrations table if it doesn't exist
 	if err := m.CreateMigrationsTable(); err != nil {
 		return fmt.Errorf("failed to create migrations table: %w", err)
@@ -79,7 +230,7 @@ func (m *Migrator) Migrate(migrations []Migration) error {
 }
 
 // Rollback rolls back the last migration
-func (m *Migrator) Rollback(migrations []Migration) error {
+func (m *MigratorStruct) Rollback(migrations []MigrationInterface) error {
 	applied, err := m.getAppliedMigrations()
 	if err != nil {
 		return fmt.Errorf("failed to get applied migrations: %w", err)
@@ -93,7 +244,7 @@ func (m *Migrator) Rollback(migrations []Migration) error {
 	lastMigration := applied[len(applied)-1]
 
 	// Find the corresponding migration in the list
-	var targetMigration Migration
+	var targetMigration MigrationInterface
 	for _, migration := range migrations {
 		if migration.Version() == lastMigration.Version {
 			targetMigration = migration
@@ -119,7 +270,7 @@ func (m *Migrator) Rollback(migrations []Migration) error {
 }
 
 // Status shows the status of migrations
-func (m *Migrator) Status(migrations []Migration) error {
+func (m *MigratorStruct) Status(migrations []MigrationInterface) error {
 	applied, err := m.getAppliedMigrations()
 	if err != nil {
 		return fmt.Errorf("failed to get applied migrations: %w", err)
@@ -141,7 +292,7 @@ func (m *Migrator) Status(migrations []Migration) error {
 
 // Helper methods
 
-func (m *Migrator) getAppliedMigrations() ([]MigrationRecord, error) {
+func (m *MigratorStruct) getAppliedMigrations() ([]MigrationRecord, error) {
 	query := "SELECT version, applied_at FROM schema_migrations ORDER BY version"
 	rows, err := m.db.Query(query)
 	if err != nil {
@@ -161,7 +312,7 @@ func (m *Migrator) getAppliedMigrations() ([]MigrationRecord, error) {
 	return migrations, rows.Err()
 }
 
-func (m *Migrator) isMigrationApplied(applied []MigrationRecord, version int64) bool {
+func (m *MigratorStruct) isMigrationApplied(applied []MigrationRecord, version int64) bool {
 	for _, record := range applied {
 		if record.Version == version {
 			return true
@@ -170,13 +321,19 @@ func (m *Migrator) isMigrationApplied(applied []MigrationRecord, version int64) 
 	return false
 }
 
-func (m *Migrator) runMigration(migration Migration) error {
+func (m *MigratorStruct) runMigration(migration MigrationInterface) error {
 	// Begin transaction
 	tx, err := m.db.Begin()
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() {
+		if err := tx.Rollback(); err != nil {
+			// Log the rollback error but don't return it
+			// as it would mask the original error
+			_ = err // Intentionally ignoring rollback error
+		}
+	}()
 
 	// Perform migration
 	if err := migration.Up(); err != nil {
@@ -194,7 +351,7 @@ func (m *Migrator) runMigration(migration Migration) error {
 	return tx.Commit()
 }
 
-func (m *Migrator) removeMigrationRecord(version int64) error {
+func (m *MigratorStruct) removeMigrationRecord(version int64) error {
 	query := "DELETE FROM schema_migrations WHERE version = ?"
 	_, err := m.db.Exec(query, version)
 	return err

@@ -16,11 +16,15 @@ func TestMigrator_Migrate_Status_Rollback(t *testing.T) {
 	db, _ := Connect("sqlite3", ":memory:")
 	SetConnection(db, "sqlite3")
 	migrator := NewMigrator()
-	migrator.CreateMigrationsTable()
+	migrator.db = db
+
+	if err := migrator.CreateMigrationsTable(); err != nil {
+		t.Fatalf("Failed to create migrations table: %v", err)
+	}
 	up, down := false, false
 	migration := &DummyMigration{&up, &down}
 	// Migrate
-	err := migrator.Migrate([]Migration{migration})
+	err := migrator.Migrate([]MigrationInterface{migration})
 	if err != nil {
 		t.Errorf("Migrate failed: %v", err)
 	}
@@ -28,12 +32,12 @@ func TestMigrator_Migrate_Status_Rollback(t *testing.T) {
 		t.Error("Up should be called")
 	}
 	// Status
-	err = migrator.Status([]Migration{migration})
+	err = migrator.Status([]MigrationInterface{migration})
 	if err != nil {
 		t.Errorf("Status failed: %v", err)
 	}
 	// Rollback
-	err = migrator.Rollback([]Migration{migration})
+	err = migrator.Rollback([]MigrationInterface{migration})
 	if err != nil {
 		t.Errorf("Rollback failed: %v", err)
 	}
@@ -46,8 +50,10 @@ func TestMigrator_Rollback_NoMigrations(t *testing.T) {
 	db, _ := Connect("sqlite3", ":memory:")
 	SetConnection(db, "sqlite3")
 	migrator := NewMigrator()
-	migrator.CreateMigrationsTable()
-	err := migrator.Rollback([]Migration{})
+	if err := migrator.CreateMigrationsTable(); err != nil {
+		t.Fatalf("Failed to create migrations table: %v", err)
+	}
+	err := migrator.Rollback([]MigrationInterface{})
 	if err == nil {
 		t.Error("Rollback should fail if no migrations applied")
 	}
@@ -61,13 +67,17 @@ func TestMigrator_Rollback_NotFound(t *testing.T) {
 	db, _ := Connect("sqlite3", ":memory:")
 	SetConnection(db, "sqlite3")
 	migrator := NewMigrator()
-	migrator.CreateMigrationsTable()
+	if err := migrator.CreateMigrationsTable(); err != nil {
+		t.Fatalf("Failed to create migrations table: %v", err)
+	}
 	up, down := false, false
 	migration := &DummyMigration{&up, &down}
-	_ = migrator.Migrate([]Migration{migration})
+	if err := migrator.Migrate([]MigrationInterface{migration}); err != nil {
+		t.Fatalf("Failed to migrate: %v", err)
+	}
 	// Try rollback with wrong version
 	other := &OtherMigration{DummyMigration{&up, &down}}
-	err := migrator.Rollback([]Migration{other})
+	err := migrator.Rollback([]MigrationInterface{other})
 	if err == nil {
 		t.Error("Rollback should fail if migration not found")
 	}

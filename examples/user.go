@@ -6,6 +6,16 @@ import (
 	"go-active-record/activerecord"
 )
 
+const (
+	minNameLength = 2
+	maxNameLength = 50
+	minAge        = 18
+	maxAge        = 100
+	adultAge      = 18
+	youngAge      = 30
+	middleAge     = 50
+)
+
 type User struct {
 	activerecord.ValidationModel
 	Name      string    `db:"name" json:"name"`
@@ -20,22 +30,23 @@ func (u *User) TableName() string {
 	return "users"
 }
 
-func (u *User) BeforeCreate() error {
+func (u *User) BeforeCreate() {
+	u.SetCreatedAt(time.Now())
+	u.SetUpdatedAt(time.Now())
 	u.setupValidations()
-	return nil
 }
 
-func (u *User) BeforeUpdate() error {
+func (u *User) BeforeUpdate() {
+	u.SetUpdatedAt(time.Now())
 	u.setupValidations()
-	return nil
 }
 
 func (u *User) setupValidations() {
 	u.PresenceOf("Name")
-	u.Length("Name", 2, 50)
+	u.Length("Name", minNameLength, maxNameLength)
 	u.AddValidation("Email", "email", "has invalid format")
 	u.Uniqueness("Email")
-	u.Numericality("Age", 18, 100)
+	u.Numericality("Age", minAge, maxAge)
 }
 
 func (u *User) FullName() string {
@@ -43,16 +54,16 @@ func (u *User) FullName() string {
 }
 
 func (u *User) IsAdult() bool {
-	return u.Age >= 18
+	return u.Age >= adultAge
 }
 
 func (u *User) AgeGroup() string {
 	switch {
-	case u.Age < 18:
+	case u.Age < adultAge:
 		return "minor"
-	case u.Age < 30:
+	case u.Age < youngAge:
 		return "young"
-	case u.Age < 50:
+	case u.Age < middleAge:
 		return "adult"
 	default:
 		return "senior"

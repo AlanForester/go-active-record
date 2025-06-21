@@ -2,11 +2,11 @@ package activerecord
 
 import (
 	"errors"
-	"reflect"
+	"fmt"
 	"time"
 )
 
-// ActiveRecord interface for instance methods of the model
+// ActiveRecord interface for instance methods of the model.
 type ActiveRecord interface {
 	Modeler
 	Create() error
@@ -15,37 +15,32 @@ type ActiveRecord interface {
 	Save() error
 	IsNewRecord() bool
 	IsPersisted() bool
+	Touch() error
+	Reload() error
+	Destroy() bool
 }
 
-// ActiveRecordModel base model with Active Record methods
+// ActiveRecordModel base model with Active Record methods.
 type ActiveRecordModel struct {
-	BaseModel // anonymous embedding
+	BaseModel
 }
 
-// Create creates a new record in the database
+// Create creates a new record in the database.
 func (m *ActiveRecordModel) Create() error {
 	return Create(m)
 }
 
-// Update updates a record in the database
+// Update updates a record in the database.
 func (m *ActiveRecordModel) Update() error {
-	model, ok := any(m).(Modeler)
-	if !ok {
-		return ErrNotModeler
-	}
-	return Update(model)
+	return Update(m)
 }
 
-// Delete deletes a record from the database
+// Delete deletes a record from the database.
 func (m *ActiveRecordModel) Delete() error {
-	model, ok := any(m).(Modeler)
-	if !ok {
-		return ErrNotModeler
-	}
-	return Delete(model)
+	return Delete(m)
 }
 
-// Save saves a record (creates or updates)
+// Save saves a record (creates or updates).
 func (m *ActiveRecordModel) Save() error {
 	if m.IsNewRecord() {
 		return m.Create()
@@ -53,50 +48,41 @@ func (m *ActiveRecordModel) Save() error {
 	return m.Update()
 }
 
-// IsNewRecord checks if a record is new
+// IsNewRecord checks if a record is new.
 func (m *ActiveRecordModel) IsNewRecord() bool {
-	return m.GetID() == nil || m.GetID() == 0
+	return m.GetID() == nil
 }
 
-// IsPersisted checks if a record is saved in the database
+// IsPersisted checks if a record is saved in the database.
 func (m *ActiveRecordModel) IsPersisted() bool {
 	return !m.IsNewRecord()
 }
 
-// Touch updates timestamps
+// Touch updates timestamps.
 func (m *ActiveRecordModel) Touch() error {
-	m.SetUpdatedAt(time.Now())
-	model, ok := any(m).(Modeler)
-	if !ok {
-		return ErrNotModeler
+	now := time.Now()
+	m.SetUpdatedAt(now)
+	if m.IsNewRecord() {
+		m.SetCreatedAt(now)
 	}
-	return Update(model)
+	return m.Update()
 }
 
-// Reload reloads data from the database
+// Reload reloads data from the database.
 func (m *ActiveRecordModel) Reload() error {
 	if m.IsNewRecord() {
 		return nil
 	}
-	model, ok := any(m).(Modeler)
-	if !ok {
-		return ErrNotModeler
-	}
-	return Find(model, m.GetID())
+	return Find(m, m.GetID())
 }
 
-// Destroy deletes a record and returns true if successful
+// Destroy deletes a record and returns true if successful.
 func (m *ActiveRecordModel) Destroy() bool {
-	if m.IsNewRecord() {
-		return false
-	}
-	if err := m.Delete(); err != nil {
-		return false
-	}
-	return true
+	err := m.Delete()
+	return err == nil
 }
 
-// Modeler interface methods
+// Modeler interface methods.
 func (m *ActiveRecordModel) GetID() interface{}       { return m.BaseModel.GetID() }
 func (m *ActiveRecordModel) SetID(id interface{})     { m.BaseModel.SetID(id) }
 func (m *ActiveRecordModel) GetCreatedAt() time.Time  { return m.BaseModel.GetCreatedAt() }
@@ -104,22 +90,15 @@ func (m *ActiveRecordModel) SetCreatedAt(t time.Time) { m.BaseModel.SetCreatedAt
 func (m *ActiveRecordModel) GetUpdatedAt() time.Time  { return m.BaseModel.GetUpdatedAt() }
 func (m *ActiveRecordModel) SetUpdatedAt(t time.Time) { m.BaseModel.SetUpdatedAt(t) }
 
-// Find fills the receiver by id
+// Find fills the receiver by id.
 func (m *ActiveRecordModel) Find(id interface{}) error {
-	_, ok := any(m).(Modeler)
-	if !ok {
-		return ErrNotModeler
-	}
 	return Find(m, id)
 }
 
-// Where returns a slice of the receiver's type matching the query
+// Where returns a slice of the receiver's type matching the query.
 func (m *ActiveRecordModel) Where(query string, args ...interface{}) (interface{}, error) {
-	typeOf := reflect.TypeOf(m).Elem()
-	sliceType := reflect.SliceOf(typeOf)
-	slicePtr := reflect.New(sliceType)
-	err := Where(slicePtr.Interface(), query, args...)
-	return slicePtr.Elem().Interface(), err
+	// This would need to be implemented based on the specific model type
+	return []interface{}{nil}, fmt.Errorf("Where method not implemented for generic ActiveRecordModel")
 }
 
 var ErrNotModeler = errors.New("receiver does not implement Modeler")

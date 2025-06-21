@@ -7,32 +7,40 @@ import (
 	"go-active-record/activerecord"
 )
 
+const (
+	defaultAge    = 30
+	youngAgeLimit = 35
+)
+
 func main() {
 	_, err := activerecord.Connect("sqlite3", "./test.db")
 	if err != nil {
 		log.Fatal("Failed to connect to database:", err)
 	}
-	defer activerecord.Close()
 
 	migrator := activerecord.NewMigrator()
-	err = migrator.Migrate([]activerecord.Migration{&CreateUsersTable{}})
-	if err != nil {
+	migrations := []activerecord.MigrationInterface{&CreateUsersTable{}}
+
+	if err := migrator.Migrate(migrations); err != nil {
+		activerecord.Close()
 		log.Fatal("Failed to run migration:", err)
 	}
 
 	user := &User{
 		Name:  "John Doe",
 		Email: "john@example.com",
-		Age:   30,
+		Age:   defaultAge,
 	}
 
 	if !user.IsValid(user) {
 		fmt.Println("Validation errors:", user.Errors())
+		activerecord.Close()
 		return
 	}
 
 	err = user.Create()
 	if err != nil {
+		activerecord.Close()
 		log.Fatal("Failed to create user:", err)
 	}
 
@@ -41,6 +49,7 @@ func main() {
 	var foundUser User
 	err = activerecord.Find(&foundUser, user.GetID())
 	if err != nil {
+		activerecord.Close()
 		log.Fatal("Failed to find user:", err)
 	}
 
@@ -49,6 +58,7 @@ func main() {
 	foundUser.Age = 31
 	err = foundUser.Update()
 	if err != nil {
+		activerecord.Close()
 		log.Fatal("Failed to update user:", err)
 	}
 
@@ -57,14 +67,16 @@ func main() {
 	var allUsers []User
 	err = activerecord.FindAll(&allUsers)
 	if err != nil {
+		activerecord.Close()
 		log.Fatal("Failed to find all users:", err)
 	}
 
 	fmt.Printf("All users: %+v\n", allUsers)
 
 	var youngUsers []User
-	err = activerecord.Where(&youngUsers, "age < ?", 35)
+	err = activerecord.Where(&youngUsers, "age < ?", youngAgeLimit)
 	if err != nil {
+		activerecord.Close()
 		log.Fatal("Failed to find young users:", err)
 	}
 
@@ -72,8 +84,10 @@ func main() {
 
 	err = foundUser.Delete()
 	if err != nil {
+		activerecord.Close()
 		log.Fatal("Failed to delete user:", err)
 	}
 
 	fmt.Println("User deleted successfully")
+	activerecord.Close()
 }

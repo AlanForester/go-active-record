@@ -4,11 +4,20 @@ import (
 	"go-active-record/activerecord"
 )
 
-// CreateUsersTable migration for creating users table
-type CreateUsersTable struct{}
+const (
+	createUsersTableVersion = 20231201000001
+	createPostsTableVersion = 20231201000002
+	createTagsTableVersion  = 20231201000003
+	addUserRoleVersion      = 20231201000003
+)
+
+// CreateUsersTable migration for creating users table.
+type CreateUsersTable struct {
+	activerecord.Migration
+}
 
 func (m *CreateUsersTable) Version() int64 {
-	return 20231201000001
+	return createUsersTableVersion
 }
 
 func (m *CreateUsersTable) Up() error {
@@ -26,11 +35,13 @@ func (m *CreateUsersTable) Down() error {
 	return activerecord.DropTable("users")
 }
 
-// CreatePostsTable migration for creating posts table
-type CreatePostsTable struct{}
+// CreatePostsTable migration for creating posts table.
+type CreatePostsTable struct {
+	activerecord.Migration
+}
 
 func (m *CreatePostsTable) Version() int64 {
-	return 20231201000002
+	return createPostsTableVersion
 }
 
 func (m *CreatePostsTable) Up() error {
@@ -50,11 +61,13 @@ func (m *CreatePostsTable) Down() error {
 	return activerecord.DropTable("posts")
 }
 
-// AddUserRole migration for adding user role
-type AddUserRole struct{}
+// AddUserRole migration for adding user role.
+type AddUserRole struct {
+	activerecord.Migration
+}
 
 func (m *AddUserRole) Version() int64 {
-	return 20231201000003
+	return addUserRoleVersion
 }
 
 func (m *AddUserRole) Up() error {
@@ -67,4 +80,26 @@ func (m *AddUserRole) Down() error {
 	query := "ALTER TABLE users DROP COLUMN role"
 	_, err := activerecord.GetConnection().Exec(query)
 	return err
+}
+
+// CreateTagsTable migration for creating tags table.
+type CreateTagsTable struct {
+	activerecord.Migration
+}
+
+func (m *CreateTagsTable) Version() int64 {
+	return createTagsTableVersion
+}
+
+func (m *CreateTagsTable) Up() error {
+	return activerecord.CreateTable("tags", func(t *activerecord.TableBuilder) {
+		t.Column("id", "SERIAL", "PRIMARY KEY")
+		t.Column("name", "VARCHAR(255)", "NOT NULL")
+		t.Timestamps()
+		t.Index("name")
+	})
+}
+
+func (m *CreateTagsTable) Down() error {
+	return activerecord.DropTable("tags")
 }

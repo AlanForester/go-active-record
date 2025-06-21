@@ -12,7 +12,13 @@ func (d *DummyModel) TableName() string { return "dummy" }
 func TestActiveRecordModel_Create_Update_Delete_Save(t *testing.T) {
 	db, _ := Connect("sqlite3", ":memory:")
 	SetConnection(db, "sqlite3")
-	db.Exec(`CREATE TABLE dummy (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TIMESTAMP, updated_at TIMESTAMP)`)
+	if _, err := db.Exec(`CREATE TABLE dummy (
+		id INTEGER PRIMARY KEY AUTOINCREMENT, 
+		created_at TIMESTAMP, 
+		updated_at TIMESTAMP
+	)`); err != nil {
+		t.Fatalf("Failed to create table: %v", err)
+	}
 	m := &ActiveRecordModel{}
 	m.SetID(nil)
 	err := m.Create()
@@ -20,8 +26,7 @@ func TestActiveRecordModel_Create_Update_Delete_Save(t *testing.T) {
 		t.Error("Create should fail for non-Modeler")
 	}
 	d := &DummyModel{}
-	err = Create(d)
-	if err != nil {
+	if err := Create(d); err != nil {
 		t.Errorf("Create failed: %v", err)
 	}
 	d.SetID(1)
@@ -55,9 +60,17 @@ func TestActiveRecordModel_Save_IsNewRecord_IsPersisted(t *testing.T) {
 func TestActiveRecordModel_Touch_Reload_Destroy(t *testing.T) {
 	db, _ := Connect("sqlite3", ":memory:")
 	SetConnection(db, "sqlite3")
-	db.Exec(`CREATE TABLE dummy (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TIMESTAMP, updated_at TIMESTAMP)`)
+	if _, err := db.Exec(`CREATE TABLE dummy (
+		id INTEGER PRIMARY KEY AUTOINCREMENT, 
+		created_at TIMESTAMP, 
+		updated_at TIMESTAMP
+	)`); err != nil {
+		t.Fatalf("Failed to create table: %v", err)
+	}
 	d := &DummyModel{}
-	Create(d)
+	if err := Create(d); err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
 	ar := &ActiveRecordModel{}
 	ar.SetID(d.GetID())
 	ar.BaseModel = d.BaseModel
@@ -78,9 +91,17 @@ func TestActiveRecordModel_Touch_Reload_Destroy(t *testing.T) {
 func TestActiveRecordModel_Find_Where(t *testing.T) {
 	db, _ := Connect("sqlite3", ":memory:")
 	SetConnection(db, "sqlite3")
-	db.Exec(`CREATE TABLE dummy (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TIMESTAMP, updated_at TIMESTAMP)`)
+	if _, err := db.Exec(`CREATE TABLE dummy (
+		id INTEGER PRIMARY KEY AUTOINCREMENT, 
+		created_at TIMESTAMP, 
+		updated_at TIMESTAMP
+	)`); err != nil {
+		t.Fatalf("Failed to create table: %v", err)
+	}
 	d := &DummyModel{}
-	Create(d)
+	if err := Create(d); err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
 	ar := &ActiveRecordModel{}
 	ar.SetID(d.GetID())
 	ar.BaseModel = d.BaseModel
@@ -92,7 +113,10 @@ func TestActiveRecordModel_Find_Where(t *testing.T) {
 	if err == nil {
 		t.Error("Where should fail for non-Modeler")
 	}
-	if reflect.ValueOf(res).Kind() != reflect.Slice {
+	t.Logf("res type: %T, value: %#v", res, res)
+	if res == nil {
+		t.Error("Where should return a slice, got nil")
+	} else if reflect.ValueOf(res).Kind() != reflect.Slice {
 		t.Error("Where should return a slice")
 	}
 }

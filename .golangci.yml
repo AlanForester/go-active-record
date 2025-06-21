@@ -1,41 +1,47 @@
-version: 1.55.2
+version: "2"
 run:
-  timeout: 5m
   go: "1.21"
-
 linters:
   enable:
-    - gofmt
-    - goimports
-    - govet
-    - errcheck
-    - staticcheck
-    - gosimple
-    - ineffassign
-    - unused
-    - misspell
-    - gosec
-    - gocyclo
     - dupl
     - goconst
     - gocritic
-    - godot
+    - gocyclo
     - goheader
-    - gomnd
     - goprintffuncname
+    - gosec
     - lll
+    - misspell
+    - mnd
     - nakedret
     - noctx
     - nolintlint
     - rowserrcheck
-    - structcheck
-    - stylecheck
-    - typecheck
+    - staticcheck
     - unconvert
     - unparam
-    - varcheck
     - whitespace
-
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

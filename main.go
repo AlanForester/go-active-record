@@ -7,7 +7,12 @@ import (
 	"go-active-record/activerecord"
 )
 
-// User model - example of using Active Record
+const (
+	defaultAge = 30
+	youngAge   = 25
+)
+
+// User model - example of using Active Record.
 type User struct {
 	activerecord.ActiveRecordModel
 	Name  string `db:"name" json:"name"`
@@ -15,21 +20,22 @@ type User struct {
 	Age   int    `db:"age" json:"age"`
 }
 
-// TableName returns the name of the table for the model
+// TableName returns the name of the table for the model.
 func (u *User) TableName() string {
 	return "users"
 }
 
 func main() {
 	// Initialize connection to the database
-	db, err := activerecord.Connect("postgres", "host=localhost port=5432 user=postgres password=password dbname=testdb sslmode=disable")
+	db, err := activerecord.Connect("postgres",
+		"host=localhost port=5432 user=postgres password=password dbname=testdb sslmode=disable")
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer db.Close()
 
 	// Set connection as global
-	activerecord.SetConnection(db)
+	activerecord.SetConnection(db, "postgres")
 
 	// Examples of using Active Record
 
@@ -37,7 +43,7 @@ func main() {
 	user := &User{
 		Name:  "John Doe",
 		Email: "john@example.com",
-		Age:   30,
+		Age:   defaultAge,
 	}
 
 	if err := user.Create(); err != nil {
@@ -62,7 +68,7 @@ func main() {
 
 	// Finding with conditions
 	var youngUsers []User
-	if err := activerecord.Where(&youngUsers, "age < ?", 25); err != nil {
+	if err := activerecord.Where(&youngUsers, "age < ?", youngAge); err != nil {
 		log.Printf("Failed to find young users: %v", err)
 	} else {
 		fmt.Printf("Young users: %d\n", len(youngUsers))
