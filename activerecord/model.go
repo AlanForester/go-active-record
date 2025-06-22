@@ -121,6 +121,12 @@ func getFieldsAndValuesDeep(val reflect.Value, t reflect.Type, excludeID bool,
 	for i := 0; i < val.NumField(); i++ {
 		field := val.Field(i)
 		fieldType := t.Field(i)
+
+		// Skip unexported fields
+		if !field.CanInterface() {
+			continue
+		}
+
 		if fieldType.Anonymous && (field.Kind() == reflect.Struct ||
 			(field.Kind() == reflect.Ptr && field.Elem().Kind() == reflect.Struct)) {
 			getFieldsAndValuesDeep(reflect.Indirect(field), reflect.Indirect(field).Type(), excludeID, fields, values)
@@ -210,12 +216,16 @@ func Find(model interface{}, id interface{}) error {
 	}
 
 	query := fmt.Sprintf("SELECT * FROM %s WHERE id = ?", modeler.TableName())
-	row := QueryRow(query, id)
-	if row == nil {
+	rows, err := Query(query, id)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
 		return ErrNotFound
 	}
-
-	return scanRow(row, model)
+	return scanRow(rows, model)
 }
 
 // Update updates a record in the database
@@ -380,40 +390,139 @@ func Where(models interface{}, query string, args ...interface{}) error {
 
 // Helper functions
 
+// Helper to recursively build a field map for all exported fields, including embedded structs
+func buildFieldMap(val reflect.Value, typ reflect.Type, prefix string, fieldMap map[string]reflect.Value) {
+	for i := 0; i < typ.NumField(); i++ {
+		fieldType := typ.Field(i)
+		field := val.Field(i)
+		if fieldType.Anonymous && field.Kind() == reflect.Struct {
+			buildFieldMap(field, field.Type(), prefix, fieldMap)
+			continue
+		}
+		if !field.CanSet() {
+			continue
+		}
+		dbTag := fieldType.Tag.Get("db")
+		if dbTag == "" {
+			dbTag = strings.ToLower(fieldType.Name)
+		}
+		if dbTag == "-" {
+			continue
+		}
+		fieldMap[dbTag] = field
+	}
+}
+
 // scanRow scans a database row into a model.
 func scanRow(row interface{}, model interface{}) error {
 	val := reflect.ValueOf(model)
-	if val.Kind() == reflect.Ptr {
+	for val.Kind() == reflect.Ptr {
 		val = val.Elem()
 	}
+	if val.Kind() != reflect.Struct {
+		return fmt.Errorf("scanRow: model is not a struct")
+	}
+	typ := val.Type()
 
-	// Рекурсивно собираем адреса всех полей (включая анонимные)
-	var dest []interface{}
-	collectFieldAddrs := func(v reflect.Value, t reflect.Type) {}
-	collectFieldAddrs = func(v reflect.Value, t reflect.Type) {
-		for i := 0; i < v.NumField(); i++ {
-			field := v.Field(i)
-			fieldType := t.Field(i)
-			if fieldType.Anonymous && field.Kind() == reflect.Struct {
-				collectFieldAddrs(field, field.Type())
-				continue
+	columns, err := getColumns(row)
+	if err != nil {
+		return err
+	}
+
+	scanArgs := make([]interface{}, len(columns))
+	fieldMap := make(map[string]reflect.Value)
+	buildFieldMap(val, typ, "", fieldMap)
+
+	for i, col := range columns {
+		if field, ok := fieldMap[col]; ok {
+			// Handle NULL values based on field type
+			switch field.Kind() {
+			case reflect.String:
+				var nullStr sql.NullString
+				scanArgs[i] = &nullStr
+			case reflect.Int, reflect.Int64:
+				var nullInt sql.NullInt64
+				scanArgs[i] = &nullInt
+			case reflect.Int32:
+				var nullInt32 sql.NullInt32
+				scanArgs[i] = &nullInt32
+			case reflect.Int16:
+				var nullInt16 sql.NullInt16
+				scanArgs[i] = &nullInt16
+			case reflect.Float64:
+				var nullFloat sql.NullFloat64
+				scanArgs[i] = &nullFloat
+			case reflect.Bool:
+				var nullBool sql.NullBool
+				scanArgs[i] = &nullBool
+			default:
+				scanArgs[i] = field.Addr().Interface()
 			}
-			dbTag := fieldType.Tag.Get("db")
-			if dbTag == "-" {
-				continue
-			}
-			dest = append(dest, field.Addr().Interface())
+		} else {
+			var dummy interface{}
+			scanArgs[i] = &dummy
 		}
 	}
-	collectFieldAddrs(val, val.Type())
 
-	// Use the appropriate scan method based on the row type.
 	switch r := row.(type) {
 	case *sql.Row:
-		return r.Scan(dest...)
+		if err := r.Scan(scanArgs...); err != nil {
+			return err
+		}
 	case *sql.Rows:
-		return r.Scan(dest...)
+		if err := r.Scan(scanArgs...); err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("unsupported row type: %T", row)
+	}
+
+	// Set the field values from the scanned data
+	for i, col := range columns {
+		if field, ok := fieldMap[col]; ok {
+			switch field.Kind() {
+			case reflect.String:
+				if nullStr, ok := scanArgs[i].(*sql.NullString); ok && nullStr.Valid {
+					field.SetString(nullStr.String)
+				}
+			case reflect.Int, reflect.Int64:
+				if nullInt, ok := scanArgs[i].(*sql.NullInt64); ok && nullInt.Valid {
+					field.SetInt(nullInt.Int64)
+				}
+			case reflect.Int32:
+				if nullInt32, ok := scanArgs[i].(*sql.NullInt32); ok && nullInt32.Valid {
+					field.SetInt(int64(nullInt32.Int32))
+				}
+			case reflect.Int16:
+				if nullInt16, ok := scanArgs[i].(*sql.NullInt16); ok && nullInt16.Valid {
+					field.SetInt(int64(nullInt16.Int16))
+				}
+			case reflect.Float64:
+				if nullFloat, ok := scanArgs[i].(*sql.NullFloat64); ok && nullFloat.Valid {
+					field.SetFloat(nullFloat.Float64)
+				}
+			case reflect.Bool:
+				if nullBool, ok := scanArgs[i].(*sql.NullBool); ok && nullBool.Valid {
+					field.SetBool(nullBool.Bool)
+				}
+			default:
+				// For other types, the value was already set directly
+			}
+		}
+	}
+
+	return nil
+}
+
+func getColumns(row interface{}) ([]string, error) {
+	switch r := row.(type) {
+	case *sql.Row:
+		// For *sql.Row, we need to use a different approach since we can't get columns directly
+		// We'll use a temporary *sql.Rows to get the column information
+		return nil, fmt.Errorf("cannot get columns from *sql.Row directly; use *sql.Rows for column info")
+	case *sql.Rows:
+		return r.Columns()
+	default:
+		return nil, fmt.Errorf("unsupported row type: %T", row)
 	}
 }

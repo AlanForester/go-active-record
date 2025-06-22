@@ -5,6 +5,7 @@
 *.so
 *.dylib
 go-active-record
+full_featured_example
 
 # Test binary, built with `go test -c`
 *.test
@@ -65,7 +66,7 @@ temp/
 
 # Documentation build
 docs/build/
-
+docs/*
 # Docker
 .dockerignore
 

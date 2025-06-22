@@ -1,4 +1,4 @@
-module go-active-record
+module github.com/Forester-Co/go-active-record
 
 go 1.21.0
 

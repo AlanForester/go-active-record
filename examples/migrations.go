@@ -1,7 +1,7 @@
 package main
 
 import (
-	"go-active-record/activerecord"
+	"github.com/Forester-Co/go-active-record/activerecord"
 )
 
 const (

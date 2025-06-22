@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 
-	"go-active-record/activerecord"
+	"github.com/Forester-Co/go-active-record/activerecord"
 )
 
 const (
